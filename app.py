@@ -166,21 +166,16 @@ def load_data_from_sheet():
     return df[expected_cols]
 
 
-# フォーム全体を完全にクリアするヘルパー関数
-def reset_form_state():
-    form_keys = [
-        "input_company",
-        "input_industry",
-        "input_my_id",
-        "input_password",
-        "input_status",
-        "input_url",
-        "input_memo",
-    ]
-    for k in form_keys:
-        if k in st.session_state:
-            del st.session_state[k]
+# 記入欄の値を直接クリアする関数
+def clear_all_inputs():
     st.session_state["selected_company_box"] = "【新規登録】"
+    st.session_state["input_company"] = ""
+    st.session_state["input_industry"] = "未設定"
+    st.session_state["input_my_id"] = ""
+    st.session_state["input_password"] = ""
+    st.session_state["input_status"] = "エントリー済"
+    st.session_state["input_url"] = ""
+    st.session_state["input_memo"] = ""
 
 
 # ==========================================
@@ -247,11 +242,28 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
         label = f"【{r['業界'] if r['業界'] else '未設定'}】 {r['企業名']}"
         options_map[label] = r["企業名"]
 
-    # 選択企業の変更検知用に前回の選択値を追跡
+    # --- セッションステート初期化（初回起動時） ---
+    if "selected_company_box" not in st.session_state:
+        st.session_state["selected_company_box"] = "【新規登録】"
     if "prev_selected_company" not in st.session_state:
         st.session_state["prev_selected_company"] = "【新規登録】"
 
-    # 省スペースなキーボード不要ドロップダウン
+    if "input_company" not in st.session_state:
+        st.session_state["input_company"] = ""
+    if "input_industry" not in st.session_state:
+        st.session_state["input_industry"] = "未設定"
+    if "input_my_id" not in st.session_state:
+        st.session_state["input_my_id"] = ""
+    if "input_password" not in st.session_state:
+        st.session_state["input_password"] = ""
+    if "input_status" not in st.session_state:
+        st.session_state["input_status"] = "エントリー済"
+    if "input_url" not in st.session_state:
+        st.session_state["input_url"] = ""
+    if "input_memo" not in st.session_state:
+        st.session_state["input_memo"] = ""
+
+    # ドロップダウン（企業選択）
     selected_label = st.selectbox(
         "編集する企業を選択（業界別順）",
         list(options_map.keys()),
@@ -259,87 +271,75 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
     )
     selected_company = options_map[selected_label]
 
-    # ドロップダウンの選択が変わったらフォーム状態をクリアして同期
+    # 手動で企業を切り替えた時に、フォームにその企業のデータをロードする
     if selected_company != st.session_state["prev_selected_company"]:
         st.session_state["prev_selected_company"] = selected_company
-        # フォーム用keyを削除して初期値(value)が反映されるようにリセット
-        for k in ["input_company", "input_industry", "input_my_id", "input_password", "input_status", "input_url", "input_memo"]:
-            if k in st.session_state:
-                del st.session_state[k]
-
-    if selected_company != "【新規登録】":
-        row = df[df["企業名"] == selected_company].iloc[0]
-        init_company = row["企業名"]
-        init_industry = (
-            row["業界"] if row["業界"] in INDUSTRY_LIST else "未設定"
-        )
-        init_my_id = row["ログインID"]
-        init_password = row["パスワード"]
-        init_status = (
-            row["ステータス"] if row["ステータス"] in STATUS_LIST else "エントリー済"
-        )
-        init_memo = row["メモ"]
-        init_url = row["URL"]
-    else:
-        init_company, init_industry, init_my_id, init_password = (
-            "",
-            "未設定",
-            "",
-            "",
-        )
-        init_status, init_memo, init_url = "エントリー済", "", ""
+        if selected_company != "【新規登録】":
+            row = df[df["企業名"] == selected_company].iloc[0]
+            st.session_state["input_company"] = row["企業名"]
+            st.session_state["input_industry"] = (
+                row["業界"] if row["業界"] in INDUSTRY_LIST else "未設定"
+            )
+            st.session_state["input_my_id"] = row["ログインID"]
+            st.session_state["input_password"] = row["パスワード"]
+            st.session_state["input_status"] = (
+                row["ステータス"] if row["ステータス"] in STATUS_LIST else "エントリー済"
+            )
+            st.session_state["input_url"] = row["URL"]
+            st.session_state["input_memo"] = row["メモ"]
+        else:
+            clear_all_inputs()
 
     # コピー用エリア ＆ サイトを開くボタン
     if selected_company != "【新規登録】":
         st.markdown("**📋 コピー用情報 ＆ マイページリンク**")
         cp_col1, cp_col2, cp_col3 = st.columns([2, 2, 1.5])
 
-        if init_my_id:
+        if st.session_state["input_my_id"]:
             cp_col1.caption("▼ ログインID")
-            cp_col1.code(init_my_id, language=None)
+            cp_col1.code(st.session_state["input_my_id"], language=None)
 
-        if init_password:
+        if st.session_state["input_password"]:
             cp_col2.caption("▼ パスワード")
-            cp_col2.code(init_password, language=None)
+            cp_col2.code(st.session_state["input_password"], language=None)
 
         cp_col3.caption("▼ マイページ")
-        if init_url and init_url.startswith("http"):
+        current_url = st.session_state["input_url"]
+        if current_url and current_url.startswith("http"):
             cp_col3.link_button(
-                "🌐 サイトを開く", init_url, use_container_width=True
+                "🌐 サイトを開く", current_url, use_container_width=True
             )
-        elif init_url:
+        elif current_url:
             cp_col3.link_button(
                 "🌐 サイトを開く",
-                f"https://{init_url}",
+                f"https://{current_url}",
                 use_container_width=True,
             )
         else:
             cp_col3.info("URL未登録")
 
-    # 入力フォーム（各要素に固有の key を指定）
+    # 入力フォーム
     with st.form("entry_form"):
         c1, c2 = st.columns(2)
-        company = c1.text_input("企業名*", value=init_company, key="input_company")
+        company = c1.text_input("企業名*", key="input_company")
 
         industry = c2.selectbox(
             "業界・ジャンル",
             INDUSTRY_LIST,
-            index=INDUSTRY_LIST.index(init_industry),
             key="input_industry",
         )
 
-        my_id = c1.text_input("ログインID*", value=init_my_id, key="input_my_id")
-        password = c2.text_input("パスワード", value=init_password, key="input_password")
+        my_id = c1.text_input("ログインID*", key="input_my_id")
+        password = c2.text_input("パスワード", key="input_password")
 
         status = c1.selectbox(
             "ステータス",
             STATUS_LIST,
-            index=STATUS_LIST.index(init_status),
             key="input_status",
         )
-        url = c2.text_input("マイページURL", value=init_url, key="input_url")
+        url = c2.text_input("マイページURL", key="input_url")
 
-        memo = st.text_input("メモ", value=init_memo, key="input_memo")
+        memo = st.text_input("メモ", key="input_memo")
 
         btn_save = st.form_submit_button("💾 保存（新規追加 / 上書き）")
 
@@ -370,8 +370,9 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
                     sheet.append_row(new_row)
                     st.session_state["success_msg"] = f"「{company}」を新規登録しました！"
 
-                # 登録・更新完了後にフォーム状態・キー状態を完全にリセット
-                reset_form_state()
+                # 登録・更新完了後に全記入欄を完全にクリア
+                clear_all_inputs()
+                st.session_state["prev_selected_company"] = "【新規登録】"
                 st.rerun()
 
     if selected_company != "【新規登録】":
@@ -380,8 +381,9 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
             sheet.delete_rows(row_idx)
             st.session_state["success_msg"] = f"「{selected_company}」を削除しました。"
             
-            # 削除完了後にフォーム状態・キー状態を完全にリセット
-            reset_form_state()
+            # 削除完了後に全記入欄を完全にクリア
+            clear_all_inputs()
+            st.session_state["prev_selected_company"] = "【新規登録】"
             st.rerun()
 
 st.divider()
