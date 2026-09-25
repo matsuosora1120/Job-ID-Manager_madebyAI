@@ -211,6 +211,11 @@ df = load_data_from_sheet()
 
 st.subheader("📝 データの登録 / 編集")
 
+# 完了メッセージ表示用スペース（リターン前にセットされた通知を表示）
+if "success_msg" in st.session_state:
+    st.success(st.session_state["success_msg"])
+    del st.session_state["success_msg"]
+
 with st.expander("企業情報の追加・更新・削除", expanded=True):
     # 業界順にソートした選択肢の作成
     df_sorted = df.copy()
@@ -329,17 +334,23 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
                         df[df["企業名"] == selected_company].index[0] + 2
                     )
                     sheet.update(f"A{row_idx}:G{row_idx}", [new_row])
-                    st.success(f"「{company}」を更新しました！")
+                    st.session_state["success_msg"] = f"「{company}」を更新しました！"
                 else:
                     sheet.append_row(new_row)
-                    st.success(f"「{company}」を新規登録しました！")
+                    st.session_state["success_msg"] = f"「{company}」を新規登録しました！"
+
+                # 登録・更新成功後にフォームを【新規登録】状態へ初期化
+                st.session_state["selected_company_box"] = "【新規登録】"
                 st.rerun()
 
     if selected_company != "【新規登録】":
         if st.button("🗑️ 選択中の企業を削除", type="primary"):
             row_idx = df[df["企業名"] == selected_company].index[0] + 2
             sheet.delete_rows(row_idx)
-            st.success(f"「{selected_company}」を削除しました。")
+            st.session_state["success_msg"] = f"「{selected_company}」を削除しました。"
+            
+            # 削除成功後にフォームを【新規登録】状態へ初期化
+            st.session_state["selected_company_box"] = "【新規登録】"
             st.rerun()
 
 st.divider()
