@@ -166,16 +166,9 @@ def load_data_from_sheet():
     return df[expected_cols]
 
 
-# 記入欄の値を直接クリアする関数
-def clear_all_inputs():
-    st.session_state["selected_company_box"] = "【新規登録】"
-    st.session_state["input_company"] = ""
-    st.session_state["input_industry"] = "未設定"
-    st.session_state["input_my_id"] = ""
-    st.session_state["input_password"] = ""
-    st.session_state["input_status"] = "エントリー済"
-    st.session_state["input_url"] = ""
-    st.session_state["input_memo"] = ""
+# リセット用フラグを立てる関数
+def request_reset():
+    st.session_state["reset_requested"] = True
 
 
 # ==========================================
@@ -242,7 +235,20 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
         label = f"【{r['業界'] if r['業界'] else '未設定'}】 {r['企業名']}"
         options_map[label] = r["企業名"]
 
-    # --- セッションステート初期化（初回起動時） ---
+    # リセット要求が来ていた場合、描画前に各状態をまっさらに初期化
+    if st.session_state.get("reset_requested", False):
+        st.session_state["selected_company_box"] = "【新規登録】"
+        st.session_state["input_company"] = ""
+        st.session_state["input_industry"] = "未設定"
+        st.session_state["input_my_id"] = ""
+        st.session_state["input_password"] = ""
+        st.session_state["input_status"] = "エントリー済"
+        st.session_state["input_url"] = ""
+        st.session_state["input_memo"] = ""
+        st.session_state["prev_selected_company"] = "【新規登録】"
+        st.session_state["reset_requested"] = False
+
+    # --- セッションステート初期化（初回アクセス時） ---
     if "selected_company_box" not in st.session_state:
         st.session_state["selected_company_box"] = "【新規登録】"
     if "prev_selected_company" not in st.session_state:
@@ -288,7 +294,8 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
             st.session_state["input_url"] = row["URL"]
             st.session_state["input_memo"] = row["メモ"]
         else:
-            clear_all_inputs()
+            request_reset()
+            st.rerun()
 
     # コピー用エリア ＆ サイトを開くボタン
     if selected_company != "【新規登録】":
@@ -370,9 +377,8 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
                     sheet.append_row(new_row)
                     st.session_state["success_msg"] = f"「{company}」を新規登録しました！"
 
-                # 登録・更新完了後に全記入欄を完全にクリア
-                clear_all_inputs()
-                st.session_state["prev_selected_company"] = "【新規登録】"
+                # 登録・更新完了後にリセットフラグを立てて再読み込み
+                request_reset()
                 st.rerun()
 
     if selected_company != "【新規登録】":
@@ -381,9 +387,8 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
             sheet.delete_rows(row_idx)
             st.session_state["success_msg"] = f"「{selected_company}」を削除しました。"
             
-            # 削除完了後に全記入欄を完全にクリア
-            clear_all_inputs()
-            st.session_state["prev_selected_company"] = "【新規登録】"
+            # 削除完了後にリセットフラグを立てて再読み込み
+            request_reset()
             st.rerun()
 
 st.divider()
