@@ -94,8 +94,6 @@ def native_select(label, options, key_name, default_value=None):
     # StreamlitでカスタムHTMLコンポーネントとして表示
     res = components.html(html_code, height=55)
 
-    # 選択が変更されたらセッション状態を更新
-    # Query parameters を使った簡易的な値保持
     return st.session_state[key_name]
 
 
@@ -168,6 +166,23 @@ def load_data_from_sheet():
     return df[expected_cols]
 
 
+# フォーム全体を完全にクリアするヘルパー関数
+def reset_form_state():
+    form_keys = [
+        "input_company",
+        "input_industry",
+        "input_my_id",
+        "input_password",
+        "input_status",
+        "input_url",
+        "input_memo",
+    ]
+    for k in form_keys:
+        if k in st.session_state:
+            del st.session_state[k]
+    st.session_state["selected_company_box"] = "【新規登録】"
+
+
 # ==========================================
 # 3. ログイン画面
 # ==========================================
@@ -211,7 +226,7 @@ df = load_data_from_sheet()
 
 st.subheader("📝 データの登録 / 編集")
 
-# 完了メッセージ表示用スペース（リターン前にセットされた通知を表示）
+# 完了メッセージ表示用スペース
 if "success_msg" in st.session_state:
     st.success(st.session_state["success_msg"])
     del st.session_state["success_msg"]
@@ -232,6 +247,10 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
         label = f"【{r['業界'] if r['業界'] else '未設定'}】 {r['企業名']}"
         options_map[label] = r["企業名"]
 
+    # 選択企業の変更検知用に前回の選択値を追跡
+    if "prev_selected_company" not in st.session_state:
+        st.session_state["prev_selected_company"] = "【新規登録】"
+
     # 省スペースなキーボード不要ドロップダウン
     selected_label = st.selectbox(
         "編集する企業を選択（業界別順）",
@@ -239,6 +258,14 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
         key="selected_company_box",
     )
     selected_company = options_map[selected_label]
+
+    # ドロップダウンの選択が変わったらフォーム状態をクリアして同期
+    if selected_company != st.session_state["prev_selected_company"]:
+        st.session_state["prev_selected_company"] = selected_company
+        # フォーム用keyを削除して初期値(value)が反映されるようにリセット
+        for k in ["input_company", "input_industry", "input_my_id", "input_password", "input_status", "input_url", "input_memo"]:
+            if k in st.session_state:
+                del st.session_state[k]
 
     if selected_company != "【新規登録】":
         row = df[df["企業名"] == selected_company].iloc[0]
@@ -289,26 +316,30 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
         else:
             cp_col3.info("URL未登録")
 
+    # 入力フォーム（各要素に固有の key を指定）
     with st.form("entry_form"):
         c1, c2 = st.columns(2)
-        company = c1.text_input("企業名*", value=init_company)
+        company = c1.text_input("企業名*", value=init_company, key="input_company")
 
-        # ドロップダウン（省スペース）
         industry = c2.selectbox(
             "業界・ジャンル",
             INDUSTRY_LIST,
             index=INDUSTRY_LIST.index(init_industry),
+            key="input_industry",
         )
 
-        my_id = c1.text_input("ログインID*", value=init_my_id)
-        password = c2.text_input("パスワード", value=init_password)
+        my_id = c1.text_input("ログインID*", value=init_my_id, key="input_my_id")
+        password = c2.text_input("パスワード", value=init_password, key="input_password")
 
         status = c1.selectbox(
-            "ステータス", STATUS_LIST, index=STATUS_LIST.index(init_status)
+            "ステータス",
+            STATUS_LIST,
+            index=STATUS_LIST.index(init_status),
+            key="input_status",
         )
-        url = c2.text_input("マイページURL", value=init_url)
+        url = c2.text_input("マイページURL", value=init_url, key="input_url")
 
-        memo = st.text_input("メモ", value=init_memo)
+        memo = st.text_input("メモ", value=init_memo, key="input_memo")
 
         btn_save = st.form_submit_button("💾 保存（新規追加 / 上書き）")
 
@@ -339,8 +370,8 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
                     sheet.append_row(new_row)
                     st.session_state["success_msg"] = f"「{company}」を新規登録しました！"
 
-                # 登録・更新成功後にフォームを【新規登録】状態へ初期化
-                st.session_state["selected_company_box"] = "【新規登録】"
+                # 登録・更新完了後にフォーム状態・キー状態を完全にリセット
+                reset_form_state()
                 st.rerun()
 
     if selected_company != "【新規登録】":
@@ -349,8 +380,8 @@ with st.expander("企業情報の追加・更新・削除", expanded=True):
             sheet.delete_rows(row_idx)
             st.session_state["success_msg"] = f"「{selected_company}」を削除しました。"
             
-            # 削除成功後にフォームを【新規登録】状態へ初期化
-            st.session_state["selected_company_box"] = "【新規登録】"
+            # 削除完了後にフォーム状態・キー状態を完全にリセット
+            reset_form_state()
             st.rerun()
 
 st.divider()
