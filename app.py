@@ -1,4 +1,3 @@
-
 import os
 
 import gspread
@@ -135,14 +134,12 @@ def load_data_from_sheet():
     # K列・L列の管理情報は読み込まない
     data = sheet.get("A:H")
 
-    if not data:
+    # データがない、または見出し行しかない場合は空の表を返す
+    if not data or len(data) < 2:
 
         return pd.DataFrame(columns=EXPECTED_COLS)
 
-    # 1行目をヘッダーとして取得
-    headers = data[0]
-
-    # 2行目以降を企業情報として取得
+    # 1行目は見出しなので読み飛ばし、2行目以降を企業情報として使う
     rows = data[1:]
 
     # 列数を8列に統一
@@ -150,25 +147,21 @@ def load_data_from_sheet():
 
     for row in rows:
 
-        row = row[:8]
+        row = list(row[:8])
 
         while len(row) < 8:
             row.append("")
 
         normalized_rows.append(row)
 
+    # 【変更点】見出しの文字ではなく、列の「位置」で列名を決める
+    # （H1の表記が少しずれていても志望動機が読めるようにするため）
     df = pd.DataFrame(
         normalized_rows,
-        columns=headers[:8]
+        columns=EXPECTED_COLS
     )
 
-    # 不足している列を補う
-    for col in EXPECTED_COLS:
-
-        if col not in df.columns:
-            df[col] = ""
-
-    return df[EXPECTED_COLS]
+    return df
 
 
 # ==========================================
@@ -234,6 +227,17 @@ if not st.session_state["logged_in"]:
         submit = st.form_submit_button("ログイン")
 
         if submit:
+
+            # 【変更点】送信された瞬間にもロック状態を再確認する
+            # （ロック前から開いていた画面からのログインを防ぐため）
+            if is_locked():
+
+                st.error(
+                    "🔒 ログインがロックされています。"
+                    "管理者にお問い合わせください。"
+                )
+
+                st.stop()
 
             if username in USERS and USERS[username] == password:
 
@@ -566,31 +570,32 @@ if st.session_state["show_motivation_editor"]:
 
     else:
 
-        company_list = df["企業名"].tolist()
-
-        selected_motivation_company = st.selectbox(
+        # 【変更点】企業名ではなく「表の行番号(index)」を選択肢にする
+        # → 同名企業があっても、選んだ行にそのまま保存できる
+        selected_idx = st.selectbox(
             "企業を選択",
-            company_list,
+            df.index.tolist(),
+            format_func=lambda i: f"{df.loc[i, '企業名']}（{i + 2}行目）",
             key="motivation_company_select"
         )
 
-        motivation_row = df[
-            df["企業名"] == selected_motivation_company
-        ].iloc[0]
+        selected_motivation_company = df.loc[selected_idx, "企業名"]
 
-        motivation_row_idx = (
-            df[df["企業名"] == selected_motivation_company].index[0] + 2
-        )
+        # スプレッドシート上の行番号（1行目は見出しなので +2）
+        motivation_row_idx = selected_idx + 2
 
-        current_motivation = motivation_row["志望動機"]
+        current_motivation = df.loc[selected_idx, "志望動機"]
 
         with st.form("motivation_form"):
 
+            # 【変更点】keyに行番号を入れて、企業を切り替えたら
+            # テキストエリアの中身も確実に入れ替わるようにする
             motivation = st.text_area(
                 "志望動機",
                 value=current_motivation,
                 height=300,
-                placeholder="ここに志望動機を入力してください。"
+                placeholder="ここに志望動機を入力してください。",
+                key=f"motivation_text_{selected_idx}"
             )
 
             save_motivation = st.form_submit_button(
@@ -599,9 +604,12 @@ if st.session_state["show_motivation_editor"]:
 
             if save_motivation:
 
-                sheet.update_acell(
-                    f"H{motivation_row_idx}",
-                    motivation
+                # 【変更点】value_input_option="RAW" で、「=」や「+」で
+                # 始まる文章が数式として扱われるのを防ぐ
+                sheet.update(
+                    range_name=f"H{motivation_row_idx}",
+                    values=[[motivation]],
+                    value_input_option="RAW"
                 )
 
                 st.success(
