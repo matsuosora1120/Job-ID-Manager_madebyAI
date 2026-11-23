@@ -311,6 +311,12 @@ if st.sidebar.button("🚪 ログアウト"):
 st.title("💼 就活エントリー管理 Webアプリ")
 
 df = load_data_from_sheet()
+# --- 確認用（あとで消す） ---
+st.sidebar.caption("版: 2026-11-23-debug")
+with st.sidebar.expander("🔧 デバッグ情報"):
+    st.write("列名:", list(df.columns))
+    st.write("行数:", len(df))
+    st.write("志望動機の列:", df["志望動機"].tolist())
 
 
 # ==========================================
