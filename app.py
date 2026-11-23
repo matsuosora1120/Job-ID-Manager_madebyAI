@@ -311,12 +311,7 @@ if st.sidebar.button("🚪 ログアウト"):
 st.title("💼 就活エントリー管理 Webアプリ")
 
 df = load_data_from_sheet()
-# --- 確認用（あとで消す） ---
-st.sidebar.caption("版: 2026-11-23-debug")
-with st.sidebar.expander("🔧 デバッグ情報"):
-    st.write("列名:", list(df.columns))
-    st.write("行数:", len(df))
-    st.write("志望動機の列:", df["志望動機"].tolist())
+
 
 
 # ==========================================
@@ -578,10 +573,22 @@ if st.session_state["show_motivation_editor"]:
 
         # 【変更点】企業名ではなく「表の行番号(index)」を選択肢にする
         # → 同名企業があっても、選んだ行にそのまま保存できる
+        # 企業情報の編集欄と同じ順番（業界順 → 企業名順）に並べ替える
+        sort_df = df.copy()
+
+        sort_df["industry_rank"] = sort_df["業界"].map(
+            lambda x: industry_order.get(x, 999)
+        )
+
+        # sort_values は元の行番号(index)を保ったまま並べ替える
+        sorted_indices = sort_df.sort_values(
+            by=["industry_rank", "企業名"]
+        ).index.tolist()
+
         selected_idx = st.selectbox(
             "企業を選択",
-            df.index.tolist(),
-            format_func=lambda i: f"{df.loc[i, '企業名']}（{i + 2}行目）",
+            sorted_indices,
+            format_func=lambda i: df.loc[i, "企業名"],
             key="motivation_company_select"
         )
 
